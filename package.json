@@ -1,0 +1,19 @@
+{
+  "name": "voxel-displayer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo \"open localhost:8080\" && ./node_modules/.bin/browservefy index.js 8080 -- -d",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "piyo56",
+  "license": "ISC",
+  "devDependencies": {
+    "browserify": "^14.4.0",
+    "browservefy": "0.0.10",
+    "jquery": "^3.2.1",
+    "orbit-controls": "^1.2.0",
+    "three": "^0.87.1"
+  }
+}
