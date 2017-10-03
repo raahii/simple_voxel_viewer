@@ -1,314 +1,10 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-function EventEmitter() {
-  this._events = this._events || {};
-  this._maxListeners = this._maxListeners || undefined;
-}
-module.exports = EventEmitter;
-
-// Backwards-compat with node 0.10.x
-EventEmitter.EventEmitter = EventEmitter;
-
-EventEmitter.prototype._events = undefined;
-EventEmitter.prototype._maxListeners = undefined;
-
-// By default EventEmitters will print a warning if more than 10 listeners are
-// added to it. This is a useful default which helps finding memory leaks.
-EventEmitter.defaultMaxListeners = 10;
-
-// Obviously not all Emitters should be limited to 10. This function allows
-// that to be increased. Set to zero for unlimited.
-EventEmitter.prototype.setMaxListeners = function(n) {
-  if (!isNumber(n) || n < 0 || isNaN(n))
-    throw TypeError('n must be a positive number');
-  this._maxListeners = n;
-  return this;
-};
-
-EventEmitter.prototype.emit = function(type) {
-  var er, handler, len, args, i, listeners;
-
-  if (!this._events)
-    this._events = {};
-
-  // If there is no 'error' event listener then throw.
-  if (type === 'error') {
-    if (!this._events.error ||
-        (isObject(this._events.error) && !this._events.error.length)) {
-      er = arguments[1];
-      if (er instanceof Error) {
-        throw er; // Unhandled 'error' event
-      } else {
-        // At least give some kind of context to the user
-        var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
-        err.context = er;
-        throw err;
-      }
-    }
-  }
-
-  handler = this._events[type];
-
-  if (isUndefined(handler))
-    return false;
-
-  if (isFunction(handler)) {
-    switch (arguments.length) {
-      // fast cases
-      case 1:
-        handler.call(this);
-        break;
-      case 2:
-        handler.call(this, arguments[1]);
-        break;
-      case 3:
-        handler.call(this, arguments[1], arguments[2]);
-        break;
-      // slower
-      default:
-        args = Array.prototype.slice.call(arguments, 1);
-        handler.apply(this, args);
-    }
-  } else if (isObject(handler)) {
-    args = Array.prototype.slice.call(arguments, 1);
-    listeners = handler.slice();
-    len = listeners.length;
-    for (i = 0; i < len; i++)
-      listeners[i].apply(this, args);
-  }
-
-  return true;
-};
-
-EventEmitter.prototype.addListener = function(type, listener) {
-  var m;
-
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  if (!this._events)
-    this._events = {};
-
-  // To avoid recursion in the case that type === "newListener"! Before
-  // adding it to the listeners, first emit "newListener".
-  if (this._events.newListener)
-    this.emit('newListener', type,
-              isFunction(listener.listener) ?
-              listener.listener : listener);
-
-  if (!this._events[type])
-    // Optimize the case of one listener. Don't need the extra array object.
-    this._events[type] = listener;
-  else if (isObject(this._events[type]))
-    // If we've already got an array, just append.
-    this._events[type].push(listener);
-  else
-    // Adding the second element, need to change to array.
-    this._events[type] = [this._events[type], listener];
-
-  // Check for listener leak
-  if (isObject(this._events[type]) && !this._events[type].warned) {
-    if (!isUndefined(this._maxListeners)) {
-      m = this._maxListeners;
-    } else {
-      m = EventEmitter.defaultMaxListeners;
-    }
-
-    if (m && m > 0 && this._events[type].length > m) {
-      this._events[type].warned = true;
-      console.error('(node) warning: possible EventEmitter memory ' +
-                    'leak detected. %d listeners added. ' +
-                    'Use emitter.setMaxListeners() to increase limit.',
-                    this._events[type].length);
-      if (typeof console.trace === 'function') {
-        // not supported in IE 10
-        console.trace();
-      }
-    }
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.on = EventEmitter.prototype.addListener;
-
-EventEmitter.prototype.once = function(type, listener) {
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  var fired = false;
-
-  function g() {
-    this.removeListener(type, g);
-
-    if (!fired) {
-      fired = true;
-      listener.apply(this, arguments);
-    }
-  }
-
-  g.listener = listener;
-  this.on(type, g);
-
-  return this;
-};
-
-// emits a 'removeListener' event iff the listener was removed
-EventEmitter.prototype.removeListener = function(type, listener) {
-  var list, position, length, i;
-
-  if (!isFunction(listener))
-    throw TypeError('listener must be a function');
-
-  if (!this._events || !this._events[type])
-    return this;
-
-  list = this._events[type];
-  length = list.length;
-  position = -1;
-
-  if (list === listener ||
-      (isFunction(list.listener) && list.listener === listener)) {
-    delete this._events[type];
-    if (this._events.removeListener)
-      this.emit('removeListener', type, listener);
-
-  } else if (isObject(list)) {
-    for (i = length; i-- > 0;) {
-      if (list[i] === listener ||
-          (list[i].listener && list[i].listener === listener)) {
-        position = i;
-        break;
-      }
-    }
-
-    if (position < 0)
-      return this;
-
-    if (list.length === 1) {
-      list.length = 0;
-      delete this._events[type];
-    } else {
-      list.splice(position, 1);
-    }
-
-    if (this._events.removeListener)
-      this.emit('removeListener', type, listener);
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.removeAllListeners = function(type) {
-  var key, listeners;
-
-  if (!this._events)
-    return this;
-
-  // not listening for removeListener, no need to emit
-  if (!this._events.removeListener) {
-    if (arguments.length === 0)
-      this._events = {};
-    else if (this._events[type])
-      delete this._events[type];
-    return this;
-  }
-
-  // emit removeListener for all listeners on all events
-  if (arguments.length === 0) {
-    for (key in this._events) {
-      if (key === 'removeListener') continue;
-      this.removeAllListeners(key);
-    }
-    this.removeAllListeners('removeListener');
-    this._events = {};
-    return this;
-  }
-
-  listeners = this._events[type];
-
-  if (isFunction(listeners)) {
-    this.removeListener(type, listeners);
-  } else if (listeners) {
-    // LIFO order
-    while (listeners.length)
-      this.removeListener(type, listeners[listeners.length - 1]);
-  }
-  delete this._events[type];
-
-  return this;
-};
-
-EventEmitter.prototype.listeners = function(type) {
-  var ret;
-  if (!this._events || !this._events[type])
-    ret = [];
-  else if (isFunction(this._events[type]))
-    ret = [this._events[type]];
-  else
-    ret = this._events[type].slice();
-  return ret;
-};
-
-EventEmitter.prototype.listenerCount = function(type) {
-  if (this._events) {
-    var evlistener = this._events[type];
-
-    if (isFunction(evlistener))
-      return 1;
-    else if (evlistener)
-      return evlistener.length;
-  }
-  return 0;
-};
-
-EventEmitter.listenerCount = function(emitter, type) {
-  return emitter.listenerCount(type);
-};
-
-function isFunction(arg) {
-  return typeof arg === 'function';
-}
-
-function isNumber(arg) {
-  return typeof arg === 'number';
-}
-
-function isObject(arg) {
-  return typeof arg === 'object' && arg !== null;
-}
-
-function isUndefined(arg) {
-  return arg === void 0;
-}
-
-},{}],2:[function(require,module,exports){
 var THREE = require('three')
-var controls = require('orbit-controls')()
+var OrbitControls = require('three-orbit-controls')(THREE)
 var $ = require("jquery");
 
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias:true});
-var width = $('.container').width()
+var width  = $('.container').width()
 var height = $('.container').height()
 renderer.setSize(width, height)
 renderer.setClearColor( new THREE.Color(0xffffff),0.0);
@@ -321,6 +17,7 @@ const scene = new THREE.Scene();
 camera = new THREE.PerspectiveCamera( 40, width / height, 1, 10000 )
 camera.position.set(0, 500, 600);
 camera.lookAt(new THREE.Vector3(0, 0, 0))
+controls = new OrbitControls(camera)
 
 // 箱
 start = -165
@@ -328,7 +25,7 @@ for(var i=0; i<10; i++) {
   g = new THREE.BoxGeometry(10, 10, 10);
   m = new THREE.MeshPhongMaterial({color: 0x65C87A});
   box = new THREE.Mesh(g, m);
-  box.position.set(start+i*20, 0, 0)
+  box.position.set(start+i*20, 5, 5)
   scene.add(box);
 }
 
@@ -347,7 +44,6 @@ directionalLight.position.set( 1, 0.75, 0.5 ).normalize();
 scene.add( directionalLight );
 
 // 初回実行
-controls.enable()
 animate();
 
 function animate() {
@@ -357,288 +53,11 @@ function animate() {
   box.rotation.x += 0.01;
   box.rotation.y += 0.01;
   
-  // orbit control
-  controls.update()
-  controls.copyInto(camera.position, camera.direction, camera.up)
-  
   // レンダリング
   renderer.render(scene, camera);
 }
 
-},{"jquery":19,"orbit-controls":22,"three":26}],3:[function(require,module,exports){
-module.exports = clamp
-
-function clamp(value, min, max) {
-  return min < max
-    ? (value < min ? min : value > max ? max : value)
-    : (value < max ? max : value > min ? min : value)
-}
-
-},{}],4:[function(require,module,exports){
-module.exports = function () {
-    for (var i = 0; i < arguments.length; i++) {
-        if (arguments[i] !== undefined) return arguments[i];
-    }
-};
-
-},{}],5:[function(require,module,exports){
-module.exports = defaultProperty
-
-function defaultProperty (get, set) {
-  return {
-    configurable: true,
-    enumerable: true,
-    get: get,
-    set: set
-  }
-}
-
-},{}],6:[function(require,module,exports){
-module.exports = invert
-
-/**
- * Calculates the inverse of a quat
- *
- * @param {quat} out the receiving quaternion
- * @param {quat} a quat to calculate inverse of
- * @returns {quat} out
- */
-function invert (out, a) {
-  var a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3],
-    dot = a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3,
-    invDot = dot ? 1.0 / dot : 0
-
-  // TODO: Would be faster to return [0,0,0,0] immediately if dot == 0
-
-  out[0] = -a0 * invDot
-  out[1] = -a1 * invDot
-  out[2] = -a2 * invDot
-  out[3] = a3 * invDot
-  return out
-}
-
-},{}],7:[function(require,module,exports){
-/**
- * Normalize a quat
- *
- * @param {quat} out the receiving quaternion
- * @param {quat} a quaternion to normalize
- * @returns {quat} out
- * @function
- */
-module.exports = require('gl-vec4/normalize')
-
-},{"gl-vec4/normalize":18}],8:[function(require,module,exports){
-module.exports = distance
-
-/**
- * Calculates the euclidian distance between two vec2's
- *
- * @param {vec2} a the first operand
- * @param {vec2} b the second operand
- * @returns {Number} distance between a and b
- */
-function distance(a, b) {
-    var x = b[0] - a[0],
-        y = b[1] - a[1]
-    return Math.sqrt(x*x + y*y)
-}
-},{}],9:[function(require,module,exports){
-module.exports = add;
-
-/**
- * Adds two vec3's
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {vec3} out
- */
-function add(out, a, b) {
-    out[0] = a[0] + b[0]
-    out[1] = a[1] + b[1]
-    out[2] = a[2] + b[2]
-    return out
-}
-},{}],10:[function(require,module,exports){
-module.exports = copy;
-
-/**
- * Copy the values from one vec3 to another
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the source vector
- * @returns {vec3} out
- */
-function copy(out, a) {
-    out[0] = a[0]
-    out[1] = a[1]
-    out[2] = a[2]
-    return out
-}
-},{}],11:[function(require,module,exports){
-module.exports = cross;
-
-/**
- * Computes the cross product of two vec3's
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {vec3} out
- */
-function cross(out, a, b) {
-    var ax = a[0], ay = a[1], az = a[2],
-        bx = b[0], by = b[1], bz = b[2]
-
-    out[0] = ay * bz - az * by
-    out[1] = az * bx - ax * bz
-    out[2] = ax * by - ay * bx
-    return out
-}
-},{}],12:[function(require,module,exports){
-module.exports = dot;
-
-/**
- * Calculates the dot product of two vec3's
- *
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {Number} dot product of a and b
- */
-function dot(a, b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-},{}],13:[function(require,module,exports){
-module.exports = length;
-
-/**
- * Calculates the length of a vec3
- *
- * @param {vec3} a vector to calculate length of
- * @returns {Number} length of a
- */
-function length(a) {
-    var x = a[0],
-        y = a[1],
-        z = a[2]
-    return Math.sqrt(x*x + y*y + z*z)
-}
-},{}],14:[function(require,module,exports){
-module.exports = normalize;
-
-/**
- * Normalize a vec3
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a vector to normalize
- * @returns {vec3} out
- */
-function normalize(out, a) {
-    var x = a[0],
-        y = a[1],
-        z = a[2]
-    var len = x*x + y*y + z*z
-    if (len > 0) {
-        //TODO: evaluate use of glm_invsqrt here?
-        len = 1 / Math.sqrt(len)
-        out[0] = a[0] * len
-        out[1] = a[1] * len
-        out[2] = a[2] * len
-    }
-    return out
-}
-},{}],15:[function(require,module,exports){
-module.exports = set;
-
-/**
- * Set the components of a vec3 to the given values
- *
- * @param {vec3} out the receiving vector
- * @param {Number} x X component
- * @param {Number} y Y component
- * @param {Number} z Z component
- * @returns {vec3} out
- */
-function set(out, x, y, z) {
-    out[0] = x
-    out[1] = y
-    out[2] = z
-    return out
-}
-},{}],16:[function(require,module,exports){
-module.exports = subtract;
-
-/**
- * Subtracts vector b from vector a
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the first operand
- * @param {vec3} b the second operand
- * @returns {vec3} out
- */
-function subtract(out, a, b) {
-    out[0] = a[0] - b[0]
-    out[1] = a[1] - b[1]
-    out[2] = a[2] - b[2]
-    return out
-}
-},{}],17:[function(require,module,exports){
-module.exports = transformQuat;
-
-/**
- * Transforms the vec3 with a quat
- *
- * @param {vec3} out the receiving vector
- * @param {vec3} a the vector to transform
- * @param {quat} q quaternion to transform with
- * @returns {vec3} out
- */
-function transformQuat(out, a, q) {
-    // benchmarks: http://jsperf.com/quaternion-transform-vec3-implementations
-
-    var x = a[0], y = a[1], z = a[2],
-        qx = q[0], qy = q[1], qz = q[2], qw = q[3],
-
-        // calculate quat * vec
-        ix = qw * x + qy * z - qz * y,
-        iy = qw * y + qz * x - qx * z,
-        iz = qw * z + qx * y - qy * x,
-        iw = -qx * x - qy * y - qz * z
-
-    // calculate result * inverse quat
-    out[0] = ix * qw + iw * -qx + iy * -qz - iz * -qy
-    out[1] = iy * qw + iw * -qy + iz * -qx - ix * -qz
-    out[2] = iz * qw + iw * -qz + ix * -qy - iy * -qx
-    return out
-}
-},{}],18:[function(require,module,exports){
-module.exports = normalize
-
-/**
- * Normalize a vec4
- *
- * @param {vec4} out the receiving vector
- * @param {vec4} a vector to normalize
- * @returns {vec4} out
- */
-function normalize (out, a) {
-  var x = a[0],
-    y = a[1],
-    z = a[2],
-    w = a[3]
-  var len = x * x + y * y + z * z + w * w
-  if (len > 0) {
-    len = 1 / Math.sqrt(len)
-    out[0] = x * len
-    out[1] = y * len
-    out[2] = z * len
-    out[3] = w * len
-  }
-  return out
-}
-
-},{}],19:[function(require,module,exports){
+},{"jquery":2,"three":4,"three-orbit-controls":3}],2:[function(require,module,exports){
 /*!
  * jQuery JavaScript Library v3.2.1
  * https://jquery.com/
@@ -10893,497 +10312,1029 @@ if ( !noGlobal ) {
 return jQuery;
 } );
 
-},{}],20:[function(require,module,exports){
-var rootPosition = { left: 0, top: 0 }
-
-module.exports = mouseEventOffset
-function mouseEventOffset (ev, target, out) {
-  target = target || ev.currentTarget || ev.srcElement
-  if (!Array.isArray(out)) {
-    out = [ 0, 0 ]
-  }
-  var cx = ev.clientX || 0
-  var cy = ev.clientY || 0
-  var rect = getBoundingClientOffset(target)
-  out[0] = cx - rect.left
-  out[1] = cy - rect.top
-  return out
-}
-
-function getBoundingClientOffset (element) {
-  if (element === window ||
-      element === document ||
-      element === document.body) {
-    return rootPosition
-  } else {
-    return element.getBoundingClientRect()
-  }
-}
-
-},{}],21:[function(require,module,exports){
-'use strict'
-
-var toPX = require('to-px')
-
-module.exports = mouseWheelListen
-
-function mouseWheelListen(element, callback, noScroll) {
-  if(typeof element === 'function') {
-    noScroll = !!callback
-    callback = element
-    element = window
-  }
-  var lineHeight = toPX('ex', element)
-  var listener = function(ev) {
-    if(noScroll) {
-      ev.preventDefault()
-    }
-    var dx = ev.deltaX || 0
-    var dy = ev.deltaY || 0
-    var dz = ev.deltaZ || 0
-    var mode = ev.deltaMode
-    var scale = 1
-    switch(mode) {
-      case 1:
-        scale = lineHeight
-      break
-      case 2:
-        scale = window.innerHeight
-      break
-    }
-    dx *= scale
-    dy *= scale
-    dz *= scale
-    if(dx || dy || dz) {
-      return callback(dx, dy, dz, ev)
-    }
-  }
-  element.addEventListener('wheel', listener)
-  return listener
-}
-
-},{"to-px":27}],22:[function(require,module,exports){
-var defined = require('defined')
-var clamp = require('clamp')
-
-var inputEvents = require('./lib/input')
-var quatFromVec3 = require('quat-from-unit-vec3')
-var quatInvert = require('gl-quat/invert')
-
-var glVec3 = {
-  length: require('gl-vec3/length'),
-  add: require('gl-vec3/add'),
-  subtract: require('gl-vec3/subtract'),
-  transformQuat: require('gl-vec3/transformQuat'),
-  copy: require('gl-vec3/copy'),
-  normalize: require('gl-vec3/normalize'),
-  cross: require('gl-vec3/cross')
-}
-
-var Y_UP = [0, 1, 0]
-var EPSILON = Math.pow(2, -23)
-var tmpVec3 = [0, 0, 0]
-
-module.exports = createOrbitControls
-function createOrbitControls (opt) {
-  opt = opt || {}
-
-  var inputDelta = [0, 0, 0] // x, y, zoom
-  var offset = [0, 0, 0]
-
-  var upQuat = [0, 0, 0, 1]
-  var upQuatInverse = upQuat.slice()
-  var _phi = defined(opt.phi, Math.PI / 2)
-  var _theta = opt.theta || 0
-
-  var controls = {
-    update: update,
-    copyInto: copyInto,
-
-    position: opt.position ? opt.position.slice() : [0, 0, 1],
-    direction: [0, 0, -1],
-    up: opt.up ? opt.up.slice() : [0, 1, 0],
-
-    target: opt.target ? opt.target.slice() : [0, 0, 0],
-    distance: defined(opt.distance, 1),
-    damping: defined(opt.damping, 0.25),
-    rotateSpeed: defined(opt.rotateSpeed, 0.28),
-    zoomSpeed: defined(opt.zoomSpeed, 0.0075),
-    pinchSpeed: defined(opt.pinchSpeed, 0.0075),
-
-    pinch: opt.pinching !== false,
-    zoom: opt.zoom !== false,
-    rotate: opt.rotate !== false,
-
-    phiBounds: opt.phiBounds || [0, Math.PI],
-    thetaBounds: opt.thetaBounds || [-Infinity, Infinity],
-    distanceBounds: opt.distanceBounds || [0, Infinity]
-  }
-
-  // Compute distance if not defined in user options
-  if (typeof opt.distance !== 'number') {
-    glVec3.subtract(tmpVec3, controls.position, controls.target)
-    controls.distance = glVec3.length(tmpVec3)
-  }
-
-  var input = inputEvents({
-    parent: opt.parent || window,
-    element: opt.element,
-    rotate: opt.rotate !== false ? inputRotate : null,
-    zoom: opt.zoom !== false ? inputZoom : null,
-    pinch: opt.pinch !== false ? inputPinch : null
-  })
-
-  controls.enable = input.enable
-  controls.disable = input.disable
-
-  Object.defineProperties(controls, {
-    phi: {
-      get: function () { return _phi },
-      set: function (v) {
-        _phi = v
-        applyPhiTheta()
-      }
-    },
-    theta: {
-      get: function () { return _theta },
-      set: function (v) {
-        _theta = v
-        applyPhiTheta()
-      }
-    },
-    dragging: {
-      get: function () { return input.isDragging() }
-    },
-    pinching: {
-      get: function () { return input.isPinching() }
-    }
-  })
-
-  // Apply an initial phi and theta
-  applyPhiTheta()
-
-  return controls
-
-  function inputRotate (dx, dy) {
-    var PI2 = Math.PI * 2
-    inputDelta[0] -= PI2 * dx * controls.rotateSpeed
-    inputDelta[1] -= PI2 * dy * controls.rotateSpeed
-  }
-
-  function inputZoom (delta) {
-    inputDelta[2] += delta * controls.zoomSpeed
-  }
-
-  function inputPinch (delta) {
-    inputDelta[2] -= delta * controls.pinchSpeed
-  }
-
-  function updateDirection () {
-    var cameraUp = controls.up || Y_UP
-    quatFromVec3(upQuat, cameraUp, Y_UP)
-    quatInvert(upQuatInverse, upQuat)
-
-    var distance = controls.distance
-
-    glVec3.subtract(offset, controls.position, controls.target)
-    glVec3.transformQuat(offset, offset, upQuat)
-
-    var theta = Math.atan2(offset[0], offset[2])
-    var phi = Math.atan2(Math.sqrt(offset[0] * offset[0] + offset[2] * offset[2]), offset[1])
-
-    theta += inputDelta[0]
-    phi += inputDelta[1]
-
-    theta = clamp(theta, controls.thetaBounds[0], controls.thetaBounds[1])
-    phi = clamp(phi, controls.phiBounds[0], controls.phiBounds[1])
-    phi = clamp(phi, EPSILON, Math.PI - EPSILON)
-
-    distance += inputDelta[2]
-    distance = clamp(distance, controls.distanceBounds[0], controls.distanceBounds[1])
-
-    var radius = Math.abs(distance) <= EPSILON ? EPSILON : distance
-    offset[0] = radius * Math.sin(phi) * Math.sin(theta)
-    offset[1] = radius * Math.cos(phi)
-    offset[2] = radius * Math.sin(phi) * Math.cos(theta)
-
-    _phi = phi
-    _theta = theta
-    controls.distance = distance
-
-    glVec3.transformQuat(offset, offset, upQuatInverse)
-    glVec3.add(controls.position, controls.target, offset)
-    camLookAt(controls.direction, cameraUp, controls.position, controls.target)
-  }
-
-  function update () {
-    updateDirection()
-    var damp = typeof controls.damping === 'number' ? controls.damping : 1
-    for (var i = 0; i < inputDelta.length; i++) {
-      inputDelta[i] *= 1 - damp
-    }
-  }
-
-  function copyInto (position, direction, up) {
-    if (position) glVec3.copy(position, controls.position)
-    if (direction) glVec3.copy(direction, controls.direction)
-    if (up) glVec3.copy(up, controls.up)
-  }
-
-  function applyPhiTheta () {
-    var phi = controls.phi
-    var theta = controls.theta
-    theta = clamp(theta, controls.thetaBounds[0], controls.thetaBounds[1])
-    phi = clamp(phi, controls.phiBounds[0], controls.phiBounds[1])
-    phi = clamp(phi, EPSILON, Math.PI - EPSILON)
-
-    var dist = Math.max(EPSILON, controls.distance)
-    controls.position[0] = dist * Math.sin(phi) * Math.sin(theta)
-    controls.position[1] = dist * Math.cos(phi)
-    controls.position[2] = dist * Math.sin(phi) * Math.cos(theta)
-    glVec3.add(controls.position, controls.position, controls.target)
-
-    updateDirection()
-  }
-}
-
-function camLookAt (direction, up, position, target) {
-  glVec3.copy(direction, target)
-  glVec3.subtract(direction, direction, position)
-  glVec3.normalize(direction, direction)
-}
-
-},{"./lib/input":23,"clamp":3,"defined":4,"gl-quat/invert":6,"gl-vec3/add":9,"gl-vec3/copy":10,"gl-vec3/cross":11,"gl-vec3/length":13,"gl-vec3/normalize":14,"gl-vec3/subtract":16,"gl-vec3/transformQuat":17,"quat-from-unit-vec3":25}],23:[function(require,module,exports){
-var mouseWheel = require('mouse-wheel')
-var eventOffset = require('mouse-event-offset')
-var createPinch = require('touch-pinch')
-
-module.exports = inputEvents
-function inputEvents (opt) {
-  var element = opt.element || window
-  var parent = opt.parent || element
-  var mouseStart = [0, 0]
-  var dragging = false
-  var tmp = [0, 0]
-  var tmp2 = [0, 0]
-  var pinch
-
-  var zoomFn = opt.zoom
-  var rotateFn = opt.rotate
-  var pinchFn = opt.pinch
-  var mouseWheelListener
-  var enabled = false
-  enable()
-
-  return {
-    isDragging: function () {
-      return dragging
-    },
-    isPinching: isPinching,
-    enable: enable,
-    disable: disable
-  }
-
-  function enable () {
-    if (enabled) return
-    enabled = true
-    if (zoomFn) {
-      mouseWheelListener = mouseWheel(element, function (dx, dy) {
-        zoomFn(dy)
-      }, true)
-    }
-
-    if (rotateFn) {
-      // for dragging to work outside canvas bounds,
-      // mouse events have to be added to parent
-      parent.addEventListener('mousedown', onInputDown, false)
-      parent.addEventListener('mousemove', onInputMove, false)
-      parent.addEventListener('mouseup', onInputUp, false)
-    }
-
-    if (rotateFn || pinchFn) {
-      pinch = createPinch(element)
-
-      // don't allow simulated mouse events
-      element.addEventListener('touchstart', preventDefault, false)
-
-      if (rotateFn) {
-        element.addEventListener('touchmove', onTouchMove, false)
-        pinch.on('place', onPinchPlace)
-        pinch.on('lift', onPinchLift)
-      }
-      if (pinchFn) {
-        pinch.on('change', onPinchChange)
-      }
-    }
-  }
-
-  function disable () {
-    if (!enabled) return
-    enabled = false
-    if (mouseWheelListener) {
-      element.removeEventListener('wheel', mouseWheelListener)
-    }
-    if (pinch) {
-      pinch.disable()
-      element.removeEventListener('touchstart', preventDefault, false)
-      if (rotateFn) {
-        element.removeEventListener('touchmove', onTouchMove, false)
-      }
-    }
-    if (rotateFn) {
-      parent.removeEventListener('mousedown', onInputDown, false)
-      parent.removeEventListener('mousemove', onInputMove, false)
-      parent.removeEventListener('mouseup', onInputUp, false)
-    }
-  }
-
-  function preventDefault (ev) {
-    ev.preventDefault()
-  }
-
-  function onTouchMove (ev) {
-    if (!dragging || isPinching()) return
-
-    // find currently active finger
-    for (var i = 0; i < ev.changedTouches.length; i++) {
-      var changed = ev.changedTouches[i]
-      var idx = pinch.indexOfTouch(changed)
-      // if pinch is disabled but rotate enabled,
-      // only allow first finger to affect rotation
-      var allow = pinchFn ? idx !== -1 : idx === 0
-      if (allow) {
-        onInputMove(changed)
-        break
-      }
-    }
-  }
-
-  function onPinchPlace (newFinger, lastFinger) {
-    dragging = !isPinching()
-    if (dragging) {
-      var firstFinger = lastFinger || newFinger
-      onInputDown(firstFinger)
-    }
-  }
-
-  function onPinchLift (lifted, remaining) {
-    dragging = !isPinching()
-    if (dragging && remaining) {
-      eventOffset(remaining, element, mouseStart)
-    }
-  }
-
-  function isPinching () {
-    return pinch.pinching && pinchFn
-  }
-
-  function onPinchChange (current, prev) {
-    pinchFn(current - prev)
-  }
-
-  function onInputDown (ev) {
-    eventOffset(ev, element, mouseStart)
-    if (insideBounds(mouseStart)) {
-      dragging = true
-    }
-  }
-
-  function onInputUp () {
-    dragging = false
-  }
-
-  function onInputMove (ev) {
-    var end = eventOffset(ev, element, tmp)
-    if (pinch && isPinching()) {
-      mouseStart = end
-      return
-    }
-    if (!dragging) return
-    var rect = getClientSize(tmp2)
-    var dx = (end[0] - mouseStart[0]) / rect[0]
-    var dy = (end[1] - mouseStart[1]) / rect[1]
-    rotateFn(dx, dy)
-    mouseStart[0] = end[0]
-    mouseStart[1] = end[1]
-  }
-
-  function insideBounds (pos) {
-    if (element === window ||
-        element === document ||
-        element === document.body) {
-      return true
-    } else {
-      var rect = element.getBoundingClientRect()
-      return pos[0] >= 0 && pos[1] >= 0 &&
-        pos[0] < rect.width && pos[1] < rect.height
-    }
-  }
-
-  function getClientSize (out) {
-    var source = element
-    if (source === window ||
-        source === document ||
-        source === document.body) {
-      source = document.documentElement
-    }
-    out[0] = source.clientWidth
-    out[1] = source.clientHeight
-    return out
-  }
-}
-
-},{"mouse-event-offset":20,"mouse-wheel":21,"touch-pinch":28}],24:[function(require,module,exports){
-module.exports = function parseUnit(str, out) {
-    if (!out)
-        out = [ 0, '' ]
-
-    str = String(str)
-    var num = parseFloat(str, 10)
-    out[0] = num
-    out[1] = str.match(/[\d.\-\+]*\s*(.*)/)[1] || ''
-    return out
-}
-},{}],25:[function(require,module,exports){
-// Original implementation:
-// http://lolengine.net/blog/2014/02/24/quaternion-from-two-vectors-final
-
-var dot = require('gl-vec3/dot')
-var set = require('gl-vec3/set')
-var normalize = require('gl-quat/normalize')
-var cross = require('gl-vec3/cross')
-
-var tmp = [0, 0, 0]
-var EPS = 1e-6
-
-module.exports = quatFromUnitVec3
-function quatFromUnitVec3 (out, a, b) {
-  // assumes a and b are normalized
-  var r = dot(a, b) + 1
-  if (r < EPS) {
-    /* If u and v are exactly opposite, rotate 180 degrees
-     * around an arbitrary orthogonal axis. Axis normalisation
-     * can happen later, when we normalise the quaternion. */
-    r = 0
-    if (Math.abs(a[0]) > Math.abs(a[2])) {
-      set(tmp, -a[1], a[0], 0)
-    } else {
-      set(tmp, 0, -a[2], a[1])
-    }
-  } else {
-    /* Otherwise, build quaternion the standard way. */
-    cross(tmp, a, b)
-  }
-
-  out[0] = tmp[0]
-  out[1] = tmp[1]
-  out[2] = tmp[2]
-  out[3] = r
-  normalize(out, out)
-  return out
-}
-
-},{"gl-quat/normalize":7,"gl-vec3/cross":11,"gl-vec3/dot":12,"gl-vec3/set":15}],26:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
+module.exports = function( THREE ) {
+	/**
+	 * @author qiao / https://github.com/qiao
+	 * @author mrdoob / http://mrdoob.com
+	 * @author alteredq / http://alteredqualia.com/
+	 * @author WestLangley / http://github.com/WestLangley
+	 * @author erich666 / http://erichaines.com
+	 */
+
+// This set of controls performs orbiting, dollying (zooming), and panning.
+// Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
+//
+//    Orbit - left mouse / touch: one finger move
+//    Zoom - middle mouse, or mousewheel / touch: two finger spread or squish
+//    Pan - right mouse, or arrow keys / touch: three finter swipe
+
+	function OrbitControls( object, domElement ) {
+
+		this.object = object;
+
+		this.domElement = ( domElement !== undefined ) ? domElement : document;
+
+		// Set to false to disable this control
+		this.enabled = true;
+
+		// "target" sets the location of focus, where the object orbits around
+		this.target = new THREE.Vector3();
+
+		// How far you can dolly in and out ( PerspectiveCamera only )
+		this.minDistance = 0;
+		this.maxDistance = Infinity;
+
+		// How far you can zoom in and out ( OrthographicCamera only )
+		this.minZoom = 0;
+		this.maxZoom = Infinity;
+
+		// How far you can orbit vertically, upper and lower limits.
+		// Range is 0 to Math.PI radians.
+		this.minPolarAngle = 0; // radians
+		this.maxPolarAngle = Math.PI; // radians
+
+		// How far you can orbit horizontally, upper and lower limits.
+		// If set, must be a sub-interval of the interval [ - Math.PI, Math.PI ].
+		this.minAzimuthAngle = - Infinity; // radians
+		this.maxAzimuthAngle = Infinity; // radians
+
+		// Set to true to enable damping (inertia)
+		// If damping is enabled, you must call controls.update() in your animation loop
+		this.enableDamping = false;
+		this.dampingFactor = 0.25;
+
+		// This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
+		// Set to false to disable zooming
+		this.enableZoom = true;
+		this.zoomSpeed = 1.0;
+
+		// Set to false to disable rotating
+		this.enableRotate = true;
+		this.rotateSpeed = 1.0;
+
+		// Set to false to disable panning
+		this.enablePan = true;
+		this.keyPanSpeed = 7.0;	// pixels moved per arrow key push
+
+		// Set to true to automatically rotate around the target
+		// If auto-rotate is enabled, you must call controls.update() in your animation loop
+		this.autoRotate = false;
+		this.autoRotateSpeed = 2.0; // 30 seconds per round when fps is 60
+
+		// Set to false to disable use of the keys
+		this.enableKeys = true;
+
+		// The four arrow keys
+		this.keys = { LEFT: 37, UP: 38, RIGHT: 39, BOTTOM: 40 };
+
+		// Mouse buttons
+		this.mouseButtons = { ORBIT: THREE.MOUSE.LEFT, ZOOM: THREE.MOUSE.MIDDLE, PAN: THREE.MOUSE.RIGHT };
+
+		// for reset
+		this.target0 = this.target.clone();
+		this.position0 = this.object.position.clone();
+		this.zoom0 = this.object.zoom;
+
+		//
+		// public methods
+		//
+
+		this.getPolarAngle = function () {
+
+			return spherical.phi;
+
+		};
+
+		this.getAzimuthalAngle = function () {
+
+			return spherical.theta;
+
+		};
+
+		this.reset = function () {
+
+			scope.target.copy( scope.target0 );
+			scope.object.position.copy( scope.position0 );
+			scope.object.zoom = scope.zoom0;
+
+			scope.object.updateProjectionMatrix();
+			scope.dispatchEvent( changeEvent );
+
+			scope.update();
+
+			state = STATE.NONE;
+
+		};
+
+		// this method is exposed, but perhaps it would be better if we can make it private...
+		this.update = function() {
+
+			var offset = new THREE.Vector3();
+
+			// so camera.up is the orbit axis
+			var quat = new THREE.Quaternion().setFromUnitVectors( object.up, new THREE.Vector3( 0, 1, 0 ) );
+			var quatInverse = quat.clone().inverse();
+
+			var lastPosition = new THREE.Vector3();
+			var lastQuaternion = new THREE.Quaternion();
+
+			return function update () {
+
+				var position = scope.object.position;
+
+				offset.copy( position ).sub( scope.target );
+
+				// rotate offset to "y-axis-is-up" space
+				offset.applyQuaternion( quat );
+
+				// angle from z-axis around y-axis
+				spherical.setFromVector3( offset );
+
+				if ( scope.autoRotate && state === STATE.NONE ) {
+
+					rotateLeft( getAutoRotationAngle() );
+
+				}
+
+				spherical.theta += sphericalDelta.theta;
+				spherical.phi += sphericalDelta.phi;
+
+				// restrict theta to be between desired limits
+				spherical.theta = Math.max( scope.minAzimuthAngle, Math.min( scope.maxAzimuthAngle, spherical.theta ) );
+
+				// restrict phi to be between desired limits
+				spherical.phi = Math.max( scope.minPolarAngle, Math.min( scope.maxPolarAngle, spherical.phi ) );
+
+				spherical.makeSafe();
+
+
+				spherical.radius *= scale;
+
+				// restrict radius to be between desired limits
+				spherical.radius = Math.max( scope.minDistance, Math.min( scope.maxDistance, spherical.radius ) );
+
+				// move target to panned location
+				scope.target.add( panOffset );
+
+				offset.setFromSpherical( spherical );
+
+				// rotate offset back to "camera-up-vector-is-up" space
+				offset.applyQuaternion( quatInverse );
+
+				position.copy( scope.target ).add( offset );
+
+				scope.object.lookAt( scope.target );
+
+				if ( scope.enableDamping === true ) {
+
+					sphericalDelta.theta *= ( 1 - scope.dampingFactor );
+					sphericalDelta.phi *= ( 1 - scope.dampingFactor );
+
+				} else {
+
+					sphericalDelta.set( 0, 0, 0 );
+
+				}
+
+				scale = 1;
+				panOffset.set( 0, 0, 0 );
+
+				// update condition is:
+				// min(camera displacement, camera rotation in radians)^2 > EPS
+				// using small-angle approximation cos(x/2) = 1 - x^2 / 8
+
+				if ( zoomChanged ||
+					lastPosition.distanceToSquared( scope.object.position ) > EPS ||
+					8 * ( 1 - lastQuaternion.dot( scope.object.quaternion ) ) > EPS ) {
+
+					scope.dispatchEvent( changeEvent );
+
+					lastPosition.copy( scope.object.position );
+					lastQuaternion.copy( scope.object.quaternion );
+					zoomChanged = false;
+
+					return true;
+
+				}
+
+				return false;
+
+			};
+
+		}();
+
+		this.dispose = function() {
+
+			scope.domElement.removeEventListener( 'contextmenu', onContextMenu, false );
+			scope.domElement.removeEventListener( 'mousedown', onMouseDown, false );
+			scope.domElement.removeEventListener( 'wheel', onMouseWheel, false );
+
+			scope.domElement.removeEventListener( 'touchstart', onTouchStart, false );
+			scope.domElement.removeEventListener( 'touchend', onTouchEnd, false );
+			scope.domElement.removeEventListener( 'touchmove', onTouchMove, false );
+
+			document.removeEventListener( 'mousemove', onMouseMove, false );
+			document.removeEventListener( 'mouseup', onMouseUp, false );
+
+			window.removeEventListener( 'keydown', onKeyDown, false );
+
+			//scope.dispatchEvent( { type: 'dispose' } ); // should this be added here?
+
+		};
+
+		//
+		// internals
+		//
+
+		var scope = this;
+
+		var changeEvent = { type: 'change' };
+		var startEvent = { type: 'start' };
+		var endEvent = { type: 'end' };
+
+		var STATE = { NONE : - 1, ROTATE : 0, DOLLY : 1, PAN : 2, TOUCH_ROTATE : 3, TOUCH_DOLLY : 4, TOUCH_PAN : 5 };
+
+		var state = STATE.NONE;
+
+		var EPS = 0.000001;
+
+		// current position in spherical coordinates
+		var spherical = new THREE.Spherical();
+		var sphericalDelta = new THREE.Spherical();
+
+		var scale = 1;
+		var panOffset = new THREE.Vector3();
+		var zoomChanged = false;
+
+		var rotateStart = new THREE.Vector2();
+		var rotateEnd = new THREE.Vector2();
+		var rotateDelta = new THREE.Vector2();
+
+		var panStart = new THREE.Vector2();
+		var panEnd = new THREE.Vector2();
+		var panDelta = new THREE.Vector2();
+
+		var dollyStart = new THREE.Vector2();
+		var dollyEnd = new THREE.Vector2();
+		var dollyDelta = new THREE.Vector2();
+
+		function getAutoRotationAngle() {
+
+			return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+
+		}
+
+		function getZoomScale() {
+
+			return Math.pow( 0.95, scope.zoomSpeed );
+
+		}
+
+		function rotateLeft( angle ) {
+
+			sphericalDelta.theta -= angle;
+
+		}
+
+		function rotateUp( angle ) {
+
+			sphericalDelta.phi -= angle;
+
+		}
+
+		var panLeft = function() {
+
+			var v = new THREE.Vector3();
+
+			return function panLeft( distance, objectMatrix ) {
+
+				v.setFromMatrixColumn( objectMatrix, 0 ); // get X column of objectMatrix
+				v.multiplyScalar( - distance );
+
+				panOffset.add( v );
+
+			};
+
+		}();
+
+		var panUp = function() {
+
+			var v = new THREE.Vector3();
+
+			return function panUp( distance, objectMatrix ) {
+
+				v.setFromMatrixColumn( objectMatrix, 1 ); // get Y column of objectMatrix
+				v.multiplyScalar( distance );
+
+				panOffset.add( v );
+
+			};
+
+		}();
+
+		// deltaX and deltaY are in pixels; right and down are positive
+		var pan = function() {
+
+			var offset = new THREE.Vector3();
+
+			return function pan ( deltaX, deltaY ) {
+
+				var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
+
+				if ( scope.object instanceof THREE.PerspectiveCamera ) {
+
+					// perspective
+					var position = scope.object.position;
+					offset.copy( position ).sub( scope.target );
+					var targetDistance = offset.length();
+
+					// half of the fov is center to top of screen
+					targetDistance *= Math.tan( ( scope.object.fov / 2 ) * Math.PI / 180.0 );
+
+					// we actually don't use screenWidth, since perspective camera is fixed to screen height
+					panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix );
+					panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix );
+
+				} else if ( scope.object instanceof THREE.OrthographicCamera ) {
+
+					// orthographic
+					panLeft( deltaX * ( scope.object.right - scope.object.left ) / scope.object.zoom / element.clientWidth, scope.object.matrix );
+					panUp( deltaY * ( scope.object.top - scope.object.bottom ) / scope.object.zoom / element.clientHeight, scope.object.matrix );
+
+				} else {
+
+					// camera neither orthographic nor perspective
+					console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.' );
+					scope.enablePan = false;
+
+				}
+
+			};
+
+		}();
+
+		function dollyIn( dollyScale ) {
+
+			if ( scope.object instanceof THREE.PerspectiveCamera ) {
+
+				scale /= dollyScale;
+
+			} else if ( scope.object instanceof THREE.OrthographicCamera ) {
+
+				scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom * dollyScale ) );
+				scope.object.updateProjectionMatrix();
+				zoomChanged = true;
+
+			} else {
+
+				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
+				scope.enableZoom = false;
+
+			}
+
+		}
+
+		function dollyOut( dollyScale ) {
+
+			if ( scope.object instanceof THREE.PerspectiveCamera ) {
+
+				scale *= dollyScale;
+
+			} else if ( scope.object instanceof THREE.OrthographicCamera ) {
+
+				scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom / dollyScale ) );
+				scope.object.updateProjectionMatrix();
+				zoomChanged = true;
+
+			} else {
+
+				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
+				scope.enableZoom = false;
+
+			}
+
+		}
+
+		//
+		// event callbacks - update the object state
+		//
+
+		function handleMouseDownRotate( event ) {
+
+			//console.log( 'handleMouseDownRotate' );
+
+			rotateStart.set( event.clientX, event.clientY );
+
+		}
+
+		function handleMouseDownDolly( event ) {
+
+			//console.log( 'handleMouseDownDolly' );
+
+			dollyStart.set( event.clientX, event.clientY );
+
+		}
+
+		function handleMouseDownPan( event ) {
+
+			//console.log( 'handleMouseDownPan' );
+
+			panStart.set( event.clientX, event.clientY );
+
+		}
+
+		function handleMouseMoveRotate( event ) {
+
+			//console.log( 'handleMouseMoveRotate' );
+
+			rotateEnd.set( event.clientX, event.clientY );
+			rotateDelta.subVectors( rotateEnd, rotateStart );
+
+			var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
+
+			// rotating across whole screen goes 360 degrees around
+			rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientWidth * scope.rotateSpeed );
+
+			// rotating up and down along whole screen attempts to go 360, but limited to 180
+			rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight * scope.rotateSpeed );
+
+			rotateStart.copy( rotateEnd );
+
+			scope.update();
+
+		}
+
+		function handleMouseMoveDolly( event ) {
+
+			//console.log( 'handleMouseMoveDolly' );
+
+			dollyEnd.set( event.clientX, event.clientY );
+
+			dollyDelta.subVectors( dollyEnd, dollyStart );
+
+			if ( dollyDelta.y > 0 ) {
+
+				dollyIn( getZoomScale() );
+
+			} else if ( dollyDelta.y < 0 ) {
+
+				dollyOut( getZoomScale() );
+
+			}
+
+			dollyStart.copy( dollyEnd );
+
+			scope.update();
+
+		}
+
+		function handleMouseMovePan( event ) {
+
+			//console.log( 'handleMouseMovePan' );
+
+			panEnd.set( event.clientX, event.clientY );
+
+			panDelta.subVectors( panEnd, panStart );
+
+			pan( panDelta.x, panDelta.y );
+
+			panStart.copy( panEnd );
+
+			scope.update();
+
+		}
+
+		function handleMouseUp( event ) {
+
+			//console.log( 'handleMouseUp' );
+
+		}
+
+		function handleMouseWheel( event ) {
+
+			//console.log( 'handleMouseWheel' );
+
+			if ( event.deltaY < 0 ) {
+
+				dollyOut( getZoomScale() );
+
+			} else if ( event.deltaY > 0 ) {
+
+				dollyIn( getZoomScale() );
+
+			}
+
+			scope.update();
+
+		}
+
+		function handleKeyDown( event ) {
+
+			//console.log( 'handleKeyDown' );
+
+			switch ( event.keyCode ) {
+
+				case scope.keys.UP:
+					pan( 0, scope.keyPanSpeed );
+					scope.update();
+					break;
+
+				case scope.keys.BOTTOM:
+					pan( 0, - scope.keyPanSpeed );
+					scope.update();
+					break;
+
+				case scope.keys.LEFT:
+					pan( scope.keyPanSpeed, 0 );
+					scope.update();
+					break;
+
+				case scope.keys.RIGHT:
+					pan( - scope.keyPanSpeed, 0 );
+					scope.update();
+					break;
+
+			}
+
+		}
+
+		function handleTouchStartRotate( event ) {
+
+			//console.log( 'handleTouchStartRotate' );
+
+			rotateStart.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
+
+		}
+
+		function handleTouchStartDolly( event ) {
+
+			//console.log( 'handleTouchStartDolly' );
+
+			var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+			var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+
+			var distance = Math.sqrt( dx * dx + dy * dy );
+
+			dollyStart.set( 0, distance );
+
+		}
+
+		function handleTouchStartPan( event ) {
+
+			//console.log( 'handleTouchStartPan' );
+
+			panStart.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
+
+		}
+
+		function handleTouchMoveRotate( event ) {
+
+			//console.log( 'handleTouchMoveRotate' );
+
+			rotateEnd.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
+			rotateDelta.subVectors( rotateEnd, rotateStart );
+
+			var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
+
+			// rotating across whole screen goes 360 degrees around
+			rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientWidth * scope.rotateSpeed );
+
+			// rotating up and down along whole screen attempts to go 360, but limited to 180
+			rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight * scope.rotateSpeed );
+
+			rotateStart.copy( rotateEnd );
+
+			scope.update();
+
+		}
+
+		function handleTouchMoveDolly( event ) {
+
+			//console.log( 'handleTouchMoveDolly' );
+
+			var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+			var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+
+			var distance = Math.sqrt( dx * dx + dy * dy );
+
+			dollyEnd.set( 0, distance );
+
+			dollyDelta.subVectors( dollyEnd, dollyStart );
+
+			if ( dollyDelta.y > 0 ) {
+
+				dollyOut( getZoomScale() );
+
+			} else if ( dollyDelta.y < 0 ) {
+
+				dollyIn( getZoomScale() );
+
+			}
+
+			dollyStart.copy( dollyEnd );
+
+			scope.update();
+
+		}
+
+		function handleTouchMovePan( event ) {
+
+			//console.log( 'handleTouchMovePan' );
+
+			panEnd.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
+
+			panDelta.subVectors( panEnd, panStart );
+
+			pan( panDelta.x, panDelta.y );
+
+			panStart.copy( panEnd );
+
+			scope.update();
+
+		}
+
+		function handleTouchEnd( event ) {
+
+			//console.log( 'handleTouchEnd' );
+
+		}
+
+		//
+		// event handlers - FSM: listen for events and reset state
+		//
+
+		function onMouseDown( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			event.preventDefault();
+
+			if ( event.button === scope.mouseButtons.ORBIT ) {
+
+				if ( scope.enableRotate === false ) return;
+
+				handleMouseDownRotate( event );
+
+				state = STATE.ROTATE;
+
+			} else if ( event.button === scope.mouseButtons.ZOOM ) {
+
+				if ( scope.enableZoom === false ) return;
+
+				handleMouseDownDolly( event );
+
+				state = STATE.DOLLY;
+
+			} else if ( event.button === scope.mouseButtons.PAN ) {
+
+				if ( scope.enablePan === false ) return;
+
+				handleMouseDownPan( event );
+
+				state = STATE.PAN;
+
+			}
+
+			if ( state !== STATE.NONE ) {
+
+				document.addEventListener( 'mousemove', onMouseMove, false );
+				document.addEventListener( 'mouseup', onMouseUp, false );
+
+				scope.dispatchEvent( startEvent );
+
+			}
+
+		}
+
+		function onMouseMove( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			event.preventDefault();
+
+			if ( state === STATE.ROTATE ) {
+
+				if ( scope.enableRotate === false ) return;
+
+				handleMouseMoveRotate( event );
+
+			} else if ( state === STATE.DOLLY ) {
+
+				if ( scope.enableZoom === false ) return;
+
+				handleMouseMoveDolly( event );
+
+			} else if ( state === STATE.PAN ) {
+
+				if ( scope.enablePan === false ) return;
+
+				handleMouseMovePan( event );
+
+			}
+
+		}
+
+		function onMouseUp( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			handleMouseUp( event );
+
+			document.removeEventListener( 'mousemove', onMouseMove, false );
+			document.removeEventListener( 'mouseup', onMouseUp, false );
+
+			scope.dispatchEvent( endEvent );
+
+			state = STATE.NONE;
+
+		}
+
+		function onMouseWheel( event ) {
+
+			if ( scope.enabled === false || scope.enableZoom === false || ( state !== STATE.NONE && state !== STATE.ROTATE ) ) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			handleMouseWheel( event );
+
+			scope.dispatchEvent( startEvent ); // not sure why these are here...
+			scope.dispatchEvent( endEvent );
+
+		}
+
+		function onKeyDown( event ) {
+
+			if ( scope.enabled === false || scope.enableKeys === false || scope.enablePan === false ) return;
+
+			handleKeyDown( event );
+
+		}
+
+		function onTouchStart( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			switch ( event.touches.length ) {
+
+				case 1:	// one-fingered touch: rotate
+
+					if ( scope.enableRotate === false ) return;
+
+					handleTouchStartRotate( event );
+
+					state = STATE.TOUCH_ROTATE;
+
+					break;
+
+				case 2:	// two-fingered touch: dolly
+
+					if ( scope.enableZoom === false ) return;
+
+					handleTouchStartDolly( event );
+
+					state = STATE.TOUCH_DOLLY;
+
+					break;
+
+				case 3: // three-fingered touch: pan
+
+					if ( scope.enablePan === false ) return;
+
+					handleTouchStartPan( event );
+
+					state = STATE.TOUCH_PAN;
+
+					break;
+
+				default:
+
+					state = STATE.NONE;
+
+			}
+
+			if ( state !== STATE.NONE ) {
+
+				scope.dispatchEvent( startEvent );
+
+			}
+
+		}
+
+		function onTouchMove( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			switch ( event.touches.length ) {
+
+				case 1: // one-fingered touch: rotate
+
+					if ( scope.enableRotate === false ) return;
+					if ( state !== STATE.TOUCH_ROTATE ) return; // is this needed?...
+
+					handleTouchMoveRotate( event );
+
+					break;
+
+				case 2: // two-fingered touch: dolly
+
+					if ( scope.enableZoom === false ) return;
+					if ( state !== STATE.TOUCH_DOLLY ) return; // is this needed?...
+
+					handleTouchMoveDolly( event );
+
+					break;
+
+				case 3: // three-fingered touch: pan
+
+					if ( scope.enablePan === false ) return;
+					if ( state !== STATE.TOUCH_PAN ) return; // is this needed?...
+
+					handleTouchMovePan( event );
+
+					break;
+
+				default:
+
+					state = STATE.NONE;
+
+			}
+
+		}
+
+		function onTouchEnd( event ) {
+
+			if ( scope.enabled === false ) return;
+
+			handleTouchEnd( event );
+
+			scope.dispatchEvent( endEvent );
+
+			state = STATE.NONE;
+
+		}
+
+		function onContextMenu( event ) {
+
+			event.preventDefault();
+
+		}
+
+		//
+
+		scope.domElement.addEventListener( 'contextmenu', onContextMenu, false );
+
+		scope.domElement.addEventListener( 'mousedown', onMouseDown, false );
+		scope.domElement.addEventListener( 'wheel', onMouseWheel, false );
+
+		scope.domElement.addEventListener( 'touchstart', onTouchStart, false );
+		scope.domElement.addEventListener( 'touchend', onTouchEnd, false );
+		scope.domElement.addEventListener( 'touchmove', onTouchMove, false );
+
+		window.addEventListener( 'keydown', onKeyDown, false );
+
+		// force an update at start
+
+		this.update();
+
+	};
+
+	OrbitControls.prototype = Object.create( THREE.EventDispatcher.prototype );
+	OrbitControls.prototype.constructor = OrbitControls;
+
+	Object.defineProperties( OrbitControls.prototype, {
+
+		center: {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .center has been renamed to .target' );
+				return this.target;
+
+			}
+
+		},
+
+		// backward compatibility
+
+		noZoom: {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.' );
+				return ! this.enableZoom;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.' );
+				this.enableZoom = ! value;
+
+			}
+
+		},
+
+		noRotate: {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.' );
+				return ! this.enableRotate;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.' );
+				this.enableRotate = ! value;
+
+			}
+
+		},
+
+		noPan: {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.' );
+				return ! this.enablePan;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.' );
+				this.enablePan = ! value;
+
+			}
+
+		},
+
+		noKeys: {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.' );
+				return ! this.enableKeys;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.' );
+				this.enableKeys = ! value;
+
+			}
+
+		},
+
+		staticMoving : {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.' );
+				return ! this.enableDamping;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.' );
+				this.enableDamping = ! value;
+
+			}
+
+		},
+
+		dynamicDampingFactor : {
+
+			get: function () {
+
+				console.warn( 'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.' );
+				return this.dampingFactor;
+
+			},
+
+			set: function ( value ) {
+
+				console.warn( 'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.' );
+				this.dampingFactor = value;
+
+			}
+
+		}
+
+	} );
+
+	return OrbitControls;
+};
+
+},{}],4:[function(require,module,exports){
 (function (global, factory) {
 	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
 	typeof define === 'function' && define.amd ? define(['exports'], factory) :
@@ -55624,220 +55575,4 @@ function quatFromUnitVec3 (out, a, b) {
 
 })));
 
-},{}],27:[function(require,module,exports){
-'use strict'
-
-var parseUnit = require('parse-unit')
-
-module.exports = toPX
-
-var PIXELS_PER_INCH = 96
-
-function getPropertyInPX(element, prop) {
-  var parts = parseUnit(getComputedStyle(element).getPropertyValue(prop))
-  return parts[0] * toPX(parts[1], element)
-}
-
-//This brutal hack is needed
-function getSizeBrutal(unit, element) {
-  var testDIV = document.createElement('div')
-  testDIV.style['font-size'] = '128' + unit
-  element.appendChild(testDIV)
-  var size = getPropertyInPX(testDIV, 'font-size') / 128
-  element.removeChild(testDIV)
-  return size
-}
-
-function toPX(str, element) {
-  element = element || document.body
-  str = (str || 'px').trim().toLowerCase()
-  if(element === window || element === document) {
-    element = document.body 
-  }
-  switch(str) {
-    case '%':  //Ambiguous, not sure if we should use width or height
-      return element.clientHeight / 100.0
-    case 'ch':
-    case 'ex':
-      return getSizeBrutal(str, element)
-    case 'em':
-      return getPropertyInPX(element, 'font-size')
-    case 'rem':
-      return getPropertyInPX(document.body, 'font-size')
-    case 'vw':
-      return window.innerWidth/100
-    case 'vh':
-      return window.innerHeight/100
-    case 'vmin':
-      return Math.min(window.innerWidth, window.innerHeight) / 100
-    case 'vmax':
-      return Math.max(window.innerWidth, window.innerHeight) / 100
-    case 'in':
-      return PIXELS_PER_INCH
-    case 'cm':
-      return PIXELS_PER_INCH / 2.54
-    case 'mm':
-      return PIXELS_PER_INCH / 25.4
-    case 'pt':
-      return PIXELS_PER_INCH / 72
-    case 'pc':
-      return PIXELS_PER_INCH / 6
-  }
-  return 1
-}
-},{"parse-unit":24}],28:[function(require,module,exports){
-var getDistance = require('gl-vec2/distance')
-var EventEmitter = require('events').EventEmitter
-var dprop = require('dprop')
-var eventOffset = require('mouse-event-offset')
-
-module.exports = touchPinch
-function touchPinch (target) {
-  target = target || window
-
-  var emitter = new EventEmitter()
-  var fingers = [ null, null ]
-  var activeCount = 0
-
-  var lastDistance = 0
-  var ended = false
-  var enabled = false
-
-  // some read-only values
-  Object.defineProperties(emitter, {
-    pinching: dprop(function () {
-      return activeCount === 2
-    }),
-
-    fingers: dprop(function () {
-      return fingers
-    })
-  })
-
-  enable()
-  emitter.enable = enable
-  emitter.disable = disable
-  emitter.indexOfTouch = indexOfTouch
-  return emitter
-
-  function indexOfTouch (touch) {
-    var id = touch.identifier
-    for (var i = 0; i < fingers.length; i++) {
-      if (fingers[i] &&
-        fingers[i].touch &&
-        fingers[i].touch.identifier === id) {
-        return i
-      }
-    }
-    return -1
-  }
-
-  function enable () {
-    if (enabled) return
-    enabled = true
-    target.addEventListener('touchstart', onTouchStart, false)
-    target.addEventListener('touchmove', onTouchMove, false)
-    target.addEventListener('touchend', onTouchRemoved, false)
-    target.addEventListener('touchcancel', onTouchRemoved, false)
-  }
-
-  function disable () {
-    if (!enabled) return
-    enabled = false
-    activeCount = 0
-    fingers[0] = null
-    fingers[1] = null
-    lastDistance = 0
-    ended = false
-    target.removeEventListener('touchstart', onTouchStart, false)
-    target.removeEventListener('touchmove', onTouchMove, false)
-    target.removeEventListener('touchend', onTouchRemoved, false)
-    target.removeEventListener('touchcancel', onTouchRemoved, false)
-  }
-
-  function onTouchStart (ev) {
-    for (var i = 0; i < ev.changedTouches.length; i++) {
-      var newTouch = ev.changedTouches[i]
-      var id = newTouch.identifier
-      var idx = indexOfTouch(id)
-
-      if (idx === -1 && activeCount < 2) {
-        var first = activeCount === 0
-
-        // newest and previous finger (previous may be undefined)
-        var newIndex = fingers[0] ? 1 : 0
-        var oldIndex = fingers[0] ? 0 : 1
-        var newFinger = new Finger()
-
-        // add to stack
-        fingers[newIndex] = newFinger
-        activeCount++
-
-        // update touch event & position
-        newFinger.touch = newTouch
-        eventOffset(newTouch, target, newFinger.position)
-
-        var oldTouch = fingers[oldIndex] ? fingers[oldIndex].touch : undefined
-        emitter.emit('place', newTouch, oldTouch)
-
-        if (!first) {
-          var initialDistance = computeDistance()
-          ended = false
-          emitter.emit('start', initialDistance)
-          lastDistance = initialDistance
-        }
-      }
-    }
-  }
-
-  function onTouchMove (ev) {
-    var changed = false
-    for (var i = 0; i < ev.changedTouches.length; i++) {
-      var movedTouch = ev.changedTouches[i]
-      var idx = indexOfTouch(movedTouch)
-      if (idx !== -1) {
-        changed = true
-        fingers[idx].touch = movedTouch // avoid caching touches
-        eventOffset(movedTouch, target, fingers[idx].position)
-      }
-    }
-
-    if (activeCount === 2 && changed) {
-      var currentDistance = computeDistance()
-      emitter.emit('change', currentDistance, lastDistance)
-      lastDistance = currentDistance
-    }
-  }
-
-  function onTouchRemoved (ev) {
-    for (var i = 0; i < ev.changedTouches.length; i++) {
-      var removed = ev.changedTouches[i]
-      var idx = indexOfTouch(removed)
-
-      if (idx !== -1) {
-        fingers[idx] = null
-        activeCount--
-        var otherIdx = idx === 0 ? 1 : 0
-        var otherTouch = fingers[otherIdx] ? fingers[otherIdx].touch : undefined
-        emitter.emit('lift', removed, otherTouch)
-      }
-    }
-
-    if (!ended && activeCount !== 2) {
-      ended = true
-      emitter.emit('end')
-    }
-  }
-
-  function computeDistance () {
-    if (activeCount < 2) return 0
-    return getDistance(fingers[0].position, fingers[1].position)
-  }
-}
-
-function Finger () {
-  this.position = [0, 0]
-  this.touch = null
-}
-
-},{"dprop":5,"events":1,"gl-vec2/distance":8,"mouse-event-offset":20}]},{},[2]);
+},{}]},{},[1]);

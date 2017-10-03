@@ -15,5 +15,8 @@
     "jquery": "^3.2.1",
     "orbit-controls": "^1.2.0",
     "three": "^0.87.1"
+  },
+  "dependencies": {
+    "three-orbit-controls": "^82.1.0"
   }
 }
