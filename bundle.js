@@ -6234,7 +6234,7 @@ var renderer, scene, camera, grid, voxel=[];
 var grid_size = 128; var cube_size = 10;
 var origin = {
   x: -0.5*cube_size*(grid_size-1),
-  y: cube_size / 2,
+  y: -cube_size*grid_size / 2,
   z: -0.5*cube_size*(grid_size-1),
 };
 var reader = new FileReader();
@@ -6408,7 +6408,6 @@ function init() {
   // カメラ
   camera = new THREE.PerspectiveCamera( 40, width / height, 1, 10000 );
   camera.position.set(700, 1200, 1000);
-  camera.lookAt(new THREE.Vector3(0, 32, 0));
   controls = new OrbitControls(camera);
 
   // 光源
@@ -6420,6 +6419,7 @@ function init() {
 
   // グリッド
   grid = new THREE.GridHelper(grid_size*cube_size, grid_size);
+  grid.position.set( 0, -grid_size*cube_size/2, 0 );
   grid.material.color = new THREE.Color(0x000000);
   grid.material.opacity= 0.2;
   scene.add(grid);
