@@ -26,7 +26,7 @@ function read_binvox(filename) {
     } 
     var version = parseInt(lines[0].slice(8), 10)
     
-    console.log("...reading binvox version");
+    process.stdout.write('...reading depth(x), width(z), height(y) : ');
     var depth, height, width;
     for(var i=1; i<lines.length-1; i++) {
       line = lines[i]
@@ -55,8 +55,26 @@ function read_binvox(filename) {
       }
       return -1
     }
-
-    // read voxel data
+    console.log(`(${depth}, ${width}, ${height})`)
     
+    // initialize empty voxel
+    voxel = [];
+    for (var i=0; i<width; i++){
+      voxel.push([])
+      for (var j=0; j<depth; j++){
+        voxel[i].push([])
+        for (var k=0; k<height; k++){
+          voxel[i][j].push(false)
+        }
+      }
+    }
+    
+    // read voxel data
+    for ( var i=0; i<buf.byteLength/2; i++) {
+      value = (buf.readUInt8(2*i) == 1)
+      voxel.push(value)
+    }
+
+    return voxel
   })
 }

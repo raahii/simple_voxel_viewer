@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>voxel displayer</title>
+  <title>simple voxel viewer</title>
   <style>
     html, body {
       width: 100%;
@@ -10,12 +10,32 @@
     }
     .container {
       width: 90%;
-      height: 90%;
+      height: 80%;
       margin: 0 auto;
+    }
+    #wrapper {
+      width: 80%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      margin: 0 auto;
+    }
+    #drop_zone {
+      border: 2px dashed #bbb;
+      -moz-border-radius: 5px;
+      -webkit-border-radius: 5px;
+      border-radius: 5px;
+      padding: 25px;
+      text-align: center;
+      font: 20pt bold 'Vollkorn';
+      color: #bbb;
     }
   </style>
 </head>
 <body>
+  <div id='wrapper'>
+    <div id="drop_zone">ここにファイルをドロップ</div>
+  </div>
+  <output id="list"></output>
   <div class="container">
   </div>
   <script src='./bundle.js'></script>

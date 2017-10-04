@@ -1,5 +1,5 @@
 {
-  "name": "voxel-displayer",
+  "name": "simple-voxel-viewer",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -11,6 +11,7 @@
   "license": "ISC",
   "devDependencies": {
     "browserify": "^14.4.0",
+    "browserify-fs": "^1.0.0",
     "browservefy": "0.0.10",
     "jquery": "^3.2.1",
     "orbit-controls": "^1.2.0",
