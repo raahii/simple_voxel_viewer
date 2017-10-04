@@ -12,8 +12,10 @@
   "devDependencies": {
     "browserify": "^14.4.0",
     "browserify-fs": "^1.0.0",
+    "browserify-shim": "^3.8.14",
     "browservefy": "0.0.10",
     "jquery": "^3.2.1",
+    "numjs": "^0.14.2",
     "orbit-controls": "^1.2.0",
     "three": "^0.87.1"
   },

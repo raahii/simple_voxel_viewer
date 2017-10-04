@@ -3,16 +3,20 @@ var THREE = require('three');
 var fs = require('browserify-fs');
 var OrbitControls = require('three-orbit-controls')(THREE);
 var $ = require("jquery");
+var nj = require('numjs');
 
 var renderer, scene, camera, grid, voxel=[];
 var grid_size = 128; var cube_size = 10;
 var origin = {
   x: -0.5*cube_size*(grid_size-1),
-  y: -cube_size*grid_size / 2,
+  y: -cube_size / 2,
   z: -0.5*cube_size*(grid_size-1),
 };
 var reader = new FileReader();
 
+//
+// read voxel data
+//
 function read_binvox(array_buffer) {
   buf = Buffer.from(array_buffer, 'hex')
   
@@ -70,33 +74,36 @@ function read_binvox(array_buffer) {
   // read voxel data
   data = [];
   for ( var i=0; i<buf.byteLength/2; i++) {
-    value = buf.readUInt8(2*i) == 1;
-    data.push(value);
-  }
-  console.log(data);
-
-  // reshape to voxel
-  voxel = [];
-  for (var i=0; i<width; i++){
-    voxel.push([]);
-    for (var j=0; j<depth; j++){
-      voxel[i].push([]);
-      for (var k=0; k<height; k++){
-        var v = data.shift();
-        if (v === void 0) {
-          voxel[i][j].push(false);
-        } else {
-          voxel[i][j].push(v);
-        }
-      }
+    var value = buf.readUInt8(2*i);
+    var count = buf.readUInt8(2*i+1);
+    for ( var j=0; j<count; j++) {
+      data.push(value);
     }
   }
+
+  var gs = grid_size;
+  for (var i=0; i<(gs*gs*gs-data.length); i++) {
+    data.push(0);
+  }
+
+  // reshape to voxel
+  voxel = nj.array(data).reshape(gs, gs, gs);
+  console.log(voxel.shape);
 
   return new Promise(function(resolve, reject) {
     resolve();
   });
 }
 
+function fileLoad() {
+  read_binvox(reader.result).then(function() {
+    plot_voxel();
+  });
+}
+
+//
+// plotting functions
+//
 function plot_cube(x, y, z) {
   var g = new THREE.BoxGeometry(cube_size, cube_size, cube_size);
   var m = new THREE.MeshPhongMaterial({color: 0x65C87A});
@@ -113,7 +120,7 @@ function plot_voxel() {
   for (var i=0; i<grid_size; i++){
     for (var j=0; j<grid_size; j++){
       for (var k=0; k<grid_size; k++){
-        if (voxel[i][j][k] == true) {
+        if (voxel.get(i,j,k) == 1) {
           plot_cube(i, k, j);
         }
       }
@@ -133,6 +140,9 @@ function handleDragOver(evt) {
   $('#drop_zone').css('background', 'rgb(232, 232, 232)')
 }
 
+//
+// Event Listener
+//
 function handleDragLeave(evt) {
   evt.stopPropagation();
   evt.preventDefault();
@@ -157,16 +167,15 @@ function handleFileSelect(evt) {
   
   var ext = files[0].name.split('.').pop()
   if (ext == 'binvox') {
+    // will be call fileLoad() after read file
     // reader.readAsBinaryString(files[0]);
     reader.readAsArrayBuffer(files[0]);
   }
 }
-function fileLoad() {
-  read_binvox(reader.result).then(function() {
-    plot_voxel();
-  });
-}
 
+//
+// Init function
+//
 function init() {
   // レンダラー
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias:true});
@@ -181,7 +190,7 @@ function init() {
 
   // カメラ
   camera = new THREE.PerspectiveCamera( 40, width / height, 1, 10000 );
-  camera.position.set(700, 1200, 1000);
+  camera.position.set(-2000, 700, 2000);
   controls = new OrbitControls(camera);
 
   // 光源
@@ -193,7 +202,7 @@ function init() {
 
   // グリッド
   grid = new THREE.GridHelper(grid_size*cube_size, grid_size);
-  grid.position.set( 0, -grid_size*cube_size/2, 0 );
+  grid.position.set( 0, -cube_size/2, 0 );
   grid.material.color = new THREE.Color(0x000000);
   grid.material.opacity= 0.2;
   scene.add(grid);
