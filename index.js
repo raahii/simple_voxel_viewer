@@ -3,7 +3,6 @@ var THREE = require('three');
 var fs = require('browserify-fs');
 var OrbitControls = require('three-orbit-controls')(THREE);
 var $ = require("jquery");
-var nj = require('numjs');
 
 var renderer, scene, camera, grid, voxel=[];
 var grid_size = 128; var cube_size = 10;
@@ -19,6 +18,7 @@ var reader = new FileReader();
 //
 function read_binvox(array_buffer) {
   buf = Buffer.from(array_buffer, 'hex')
+  array_buffer = null;
   
   // read header
   var lines = [], line='', c=0;
@@ -70,25 +70,28 @@ function read_binvox(array_buffer) {
   }
   // should be depth === width === height
   console.log(`(${depth}, ${width}, ${height})`);
-  
+
   // read voxel data
-  data = [];
-  for ( var i=0; i<buf.byteLength/2; i++) {
-    var value = buf.readUInt8(2*i);
-    var count = buf.readUInt8(2*i+1);
-    for ( var j=0; j<count; j++) {
-      data.push(value);
+  voxel = [];
+  var idx = 0;
+  var i=0, j=0, k=0;
+  var gs = grid_size;
+  for ( var c=0; c<buf.byteLength/2; c++) {
+    var value = buf.readUInt8(2*c);
+    var count = buf.readUInt8(2*c+1);
+    if (value == 1) {
+      for ( var _=0; _<count; _++) {
+        i = Math.floor(idx/(gs*gs))
+        j = Math.floor((idx - i*gs*gs)/gs)
+        k = idx - i*gs*gs - j*gs
+        voxel.push([i, k, j]);
+        idx++;
+      }
+    } else {
+      idx += count;
     }
   }
-
-  var gs = grid_size;
-  for (var i=0; i<(gs*gs*gs-data.length); i++) {
-    data.push(0);
-  }
-
-  // reshape to voxel
-  voxel = nj.array(data).reshape(gs, gs, gs);
-  console.log(voxel.shape);
+  buf = null;
 
   return new Promise(function(resolve, reject) {
     resolve();
@@ -117,15 +120,10 @@ function plot_cube(x, y, z) {
 
 function plot_voxel() {
   console.log(voxel);
-  for (var i=0; i<grid_size; i++){
-    for (var j=0; j<grid_size; j++){
-      for (var k=0; k<grid_size; k++){
-        if (voxel.get(i,j,k) == 1) {
-          plot_cube(i, k, j);
-        }
-      }
-    }
+  for (var i=0; i<voxel.length; i++) {
+    plot_cube(voxel[i][0], voxel[i][1], voxel[i][2]);
   }
+  voxel = null;
 }
 
 function animate() {
