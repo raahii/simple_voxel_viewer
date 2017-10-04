@@ -1,6 +1,7 @@
 var THREE = require('three')
 var OrbitControls = require('three-orbit-controls')(THREE)
 var $ = require("jquery");
+var fs = require('fs');
 
 var renderer, scene, camera, grid, voxel
 var grid_size = 64
@@ -12,6 +13,9 @@ var origin = {
 }
 
 init()
+
+function read_binvox(filename) {
+}
 
 function plot_cube(x, y, z) {
   var g = new THREE.BoxGeometry(cube_size, cube_size, cube_size);
