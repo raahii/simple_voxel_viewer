@@ -10,7 +10,8 @@ You can try it at: [here](https://piyo56.github.io/simple_voxel_viewer/index.htm
 ### TODO
 
 - [ ] improve read -> plot promise flow
-- [ ] improve memory efficiency
+- [x] improve memory efficiency
+- [x] improve loading, drawing model speed
 - [ ] improve page layout
 - [ ] support `.obj`.
 - [ ] support any size of input object

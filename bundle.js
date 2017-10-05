@@ -6333,22 +6333,27 @@ function fileLoad() {
 //
 // plotting functions
 //
-function plot_cube(x, y, z) {
-  var g = new THREE.BoxGeometry(cube_size, cube_size, cube_size);
-  var m = new THREE.MeshPhongMaterial({color: 0x65C87A});
-  var box = new THREE.Mesh(g, m);
-  _x = origin.x + cube_size * x;
-  _y = origin.y + cube_size * y;
-  _z = origin.z + cube_size * z;
-  box.position.set(_x, _y, _z);
-  scene.add(box);
-}
-
 function plot_voxel() {
   console.log(voxel);
+
+
+  var geometry = new THREE.Geometry;
+  var mesh_item = new THREE.Mesh(new THREE.BoxGeometry(cube_size, cube_size, cube_size));
+
+  console.time('処理時間：');
   for (var i=0; i<voxel.length; i++) {
-    plot_cube(voxel[i][0], voxel[i][1], voxel[i][2]);
+    var norm_x = origin.x + cube_size * voxel[i][0];
+    var norm_y = origin.y + cube_size * voxel[i][1];
+    var norm_z = origin.z + cube_size * voxel[i][2];
+    mesh_item.position.set(norm_x, norm_y, norm_z);
+    geometry.mergeMesh(mesh_item);
   }
+
+  var material = new THREE.MeshPhongMaterial({color: 0x65C87A});
+  var mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh)
+  console.timeEnd('処理時間：');
+
   voxel = null;
 }
 
