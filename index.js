@@ -5,6 +5,7 @@ var OrbitControls = require('three-orbit-controls')(THREE);
 var $ = require("jquery");
 
 var renderer, scene, camera, grid, voxel=[];
+var voxel_mesh, voxel_geo, voxel_mat;
 var grid_size = 128; var cube_size = 10;
 var origin = {
   x: -0.5*cube_size*(grid_size-1),
@@ -98,7 +99,8 @@ function read_binvox(array_buffer) {
   });
 }
 
-function fileLoad() {
+function fileLoad() { 
+  // texture.dispose();
   read_binvox(reader.result).then(function() {
     plot_voxel();
   });
@@ -108,10 +110,16 @@ function fileLoad() {
 // plotting functions
 //
 function plot_voxel() {
+  if ( voxel_mesh ) {
+    scene.remove( voxel_mesh );
+    voxel_geo.dispose();
+    voxel_mat.dispose();
+    console.log('removed!')
+  }
+
   console.log(voxel);
 
-
-  var geometry = new THREE.Geometry;
+  voxel_geo = new THREE.Geometry;
   var mesh_item = new THREE.Mesh(new THREE.BoxGeometry(cube_size, cube_size, cube_size));
 
   console.time('処理時間：');
@@ -120,14 +128,15 @@ function plot_voxel() {
     var norm_y = origin.y + cube_size * voxel[i][1];
     var norm_z = origin.z + cube_size * voxel[i][2];
     mesh_item.position.set(norm_x, norm_y, norm_z);
-    geometry.mergeMesh(mesh_item);
+    voxel_geo.mergeMesh(mesh_item);
   }
 
-  var material = new THREE.MeshPhongMaterial({color: 0x65C87A});
-  var mesh = new THREE.Mesh(geometry, material);
-  scene.add(mesh)
+  voxel_mat = new THREE.MeshPhongMaterial({color: 0x65C87A});
+  voxel_mesh = new THREE.Mesh(voxel_geo, voxel_mat);
+  scene.add(voxel_mesh)
   console.timeEnd('処理時間：');
 
+  mesh_item = null;
   voxel = null;
 }
 
@@ -170,7 +179,7 @@ function handleFileSelect(evt) {
   
   var ext = files[0].name.split('.').pop()
   if (ext == 'binvox') {
-    // will be call fileLoad() after read file
+    // fileLoad() will be called after read file
     // reader.readAsBinaryString(files[0]);
     reader.readAsArrayBuffer(files[0]);
   }
