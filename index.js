@@ -6,12 +6,7 @@ var $ = require("jquery");
 
 var renderer, scene, camera, grid, voxel=[];
 var voxel_mesh, voxel_geo, voxel_mat;
-var grid_size = 128; var cube_size = 10;
-var origin = {
-  x: -0.5*cube_size*(grid_size-1),
-  y: -cube_size / 2,
-  z: -0.5*cube_size*(grid_size-1),
-};
+var grid_size = 32; var cube_size = 10;
 var reader = new FileReader();
 
 //
@@ -31,7 +26,6 @@ function read_binvox(array_buffer) {
     buf = buf.slice(pos+1);
   }
 
-  
   var line = lines[0].slice(0, 7);
   if (line != '#binvox') {
     return Promise.reject(`first line reads ${line} instead of #binvox`)
@@ -69,6 +63,7 @@ function read_binvox(array_buffer) {
   }
   
   // should be depth === width === height
+  grid_size = depth
   console.log('size: '+`(${depth}, ${width}, ${height})`);
   $('#list > .alert').append(`(${depth}, ${width}, ${height})`);
 
@@ -112,10 +107,39 @@ function fileLoad() {
 // plotting functions
 //
 function plot_voxel() {
+  console.log("plotting!");
+
+  // 既存のvoxelメッシュの削除
+  if ( grid ) {
+    scene.remove( grid );
+  }
+
+  // グリッドを描画
+  grid = new THREE.GridHelper(grid_size*cube_size, grid_size);
+  grid.position.set( 0, -cube_size/2, 0 );
+  grid.material.color = new THREE.Color(0x000000);
+  grid.material.opacity= 0.2;
+  scene.add(grid);
+  camera.position.set(-20*grid_size, 7*grid_size, 20*grid_size);
+
+  // 既存のvoxelメッシュの削除
+  if ( voxel_mesh ) {
+    scene.remove( voxel_mesh );
+    voxel_geo.dispose();
+    voxel_mat.dispose();
+  }
+  
+  // voxelを描画
   voxel_geo = new THREE.Geometry;
   var mesh_item = new THREE.Mesh(new THREE.BoxGeometry(cube_size, cube_size, cube_size));
 
   console.time('loading time');
+
+  var origin = {
+    x: -0.5*cube_size*(grid_size-1),
+    y: -cube_size / 2,
+    z: -0.5*cube_size*(grid_size-1),
+  };
   for (var i=0; i<voxel.length; i++) {
     var norm_x = origin.x + cube_size * voxel[i][0];
     var norm_y = origin.y + cube_size * voxel[i][1];
@@ -133,18 +157,6 @@ function plot_voxel() {
   voxel = null;
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
-}
-
-function handleDragOver(evt) {
-  evt.stopPropagation();
-  evt.preventDefault();
-  evt.dataTransfer.dropEffect='copy';
-  $('#drop_zone').css('background', 'rgb(232, 232, 232)')
-}
-
 //
 // Event Listener
 //
@@ -155,17 +167,17 @@ function handleDragLeave(evt) {
   $('#drop_zone').css('background', 'rgb(255,255,255)')
 }
 
+function handleDragOver(evt) {
+  evt.stopPropagation();
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect='copy';
+  $('#drop_zone').css('background', 'rgb(232, 232, 232)')
+}
+
 function handleFileSelect(evt) {
   evt.stopPropagation();
   evt.preventDefault();
 
-  if ( voxel_mesh ) {
-    scene.remove( voxel_mesh );
-    voxel_geo.dispose();
-    voxel_mat.dispose();
-    console.log('removed!')
-  }
-  
   var files = evt.dataTransfer.files; // FileList object.
   var output = [];
 
@@ -179,14 +191,28 @@ function handleFileSelect(evt) {
   var ext = files[0].name.split('.').pop()
   if (ext == 'binvox') {
     // fileLoad() will be called after read file
-    // reader.readAsBinaryString(files[0]);
     reader.readAsArrayBuffer(files[0]);
   }
+  // } else if (ext == 'obj') {
+  //   var loader = new THREE.OBJLoader();
+  //   loader.load(
+  //     'models/monster.obj',
+  //      ( object ) => {
+  //        console.log(object);
+  //     }
+  //   );
+  // }
 }
 
 //
 // Init function
 //
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
 function init() {
   // レンダラー
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias:true});
@@ -201,7 +227,8 @@ function init() {
 
   // カメラ
   camera = new THREE.PerspectiveCamera( 40, width / height, 1, 10000 );
-  camera.position.set(-2000, 700, 2000);
+  camera.position.set(-20*grid_size, 7*grid_size, 20*grid_size);
+  
   controls = new OrbitControls(camera);
 
   // 光源
@@ -218,6 +245,7 @@ function init() {
   grid.material.opacity= 0.2;
   scene.add(grid);
 
+  // ファイルのドラッグ＆ドロップ
   var dropZone = document.getElementById('drop_zone');
   dropZone.addEventListener('dragover', handleDragOver, false);
   dropZone.addEventListener('dragleave', handleDragLeave, false);
