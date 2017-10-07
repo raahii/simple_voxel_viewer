@@ -31,16 +31,13 @@ function read_binvox(array_buffer) {
     if (c++ > 1000) return -1;
   }
   
-  console.log("...reading binvox version: ");
   var line = lines[0].slice(0, 7);
   if (line != '#binvox') {
-    console.error(`Error: first line reads ${line} instead of #binvox`);
-    return -1;
+    return Promise.reject(`Error: first line reads ${line} instead of #binvox`)
   }
   var version = parseInt(lines[0].slice(8), 10);
-  console.log(version)
+  console.log("binvox version: " + version);
   
-  console.log('...reading depth(x), width(z), height(y) : ');
   var depth, height, width;
   for(var i=1; i<lines.length-1; i++) {
     line = lines[i];
@@ -58,19 +55,21 @@ function read_binvox(array_buffer) {
       break;
 
     } else {
-      console.warn(`...unrecognized keyword ${line}, skipping`);
+      return Promise.reject(`...unrecognized keyword ${line}, skipping`)
     }
   }
   if (depth === void 0) {
     if (height === void 0 || width === void 0) {
-      console.error("error reading header");
+      return Promise.reject("error reading header")
     } else {
-      console.error("missing dimensions in header");
+      return Promise.reject("missing dimensions in header")
     }
     return -1;
   }
+  
   // should be depth === width === height
-  console.log(`(${depth}, ${width}, ${height})`);
+  console.log('size: '+`(${depth}, ${width}, ${height})`);
+  $('#list > ul > li').append(`: (${depth}, ${width}, ${height})`);
 
   // read voxel data
   voxel = [];
@@ -100,9 +99,12 @@ function read_binvox(array_buffer) {
 }
 
 function fileLoad() { 
-  // texture.dispose();
-  read_binvox(reader.result).then(function() {
+  read_binvox(reader.result)
+  .then(() => {
     plot_voxel();
+  })
+  .catch((err) => {
+    console.warn(err);
   });
 }
 
@@ -117,12 +119,10 @@ function plot_voxel() {
     console.log('removed!')
   }
 
-  console.log(voxel);
-
   voxel_geo = new THREE.Geometry;
   var mesh_item = new THREE.Mesh(new THREE.BoxGeometry(cube_size, cube_size, cube_size));
 
-  console.time('処理時間：');
+  console.time('loading time');
   for (var i=0; i<voxel.length; i++) {
     var norm_x = origin.x + cube_size * voxel[i][0];
     var norm_y = origin.y + cube_size * voxel[i][1];
@@ -134,7 +134,7 @@ function plot_voxel() {
   voxel_mat = new THREE.MeshPhongMaterial({color: 0x65C87A});
   voxel_mesh = new THREE.Mesh(voxel_geo, voxel_mat);
   scene.add(voxel_mesh)
-  console.timeEnd('処理時間：');
+  console.timeEnd('loading time');
 
   mesh_item = null;
   voxel = null;
@@ -169,13 +169,15 @@ function handleFileSelect(evt) {
   var files = evt.dataTransfer.files; // FileList object.
 
   var output = [];
+
+  if ($('#list > ul')) {
+    $('#list > ul').remove();
+  }
   for (var i = 0, f; f = files[i]; i++) {
-    output.push('<li><strong>', escape(f.name), '</strong> (', f.type || 'n/a', ') - ',
-                f.size, ' bytes, last modified: ',
-                f.lastModifiedDate.toLocaleDateString(), '</li>');
+    output.push('<li><strong>', escape(f.name), '</strong></li>');
   }
 
-  $('#list').html('<ul>' + output.join('') + '</ul>');
+  $('#list').append('<ul>' + output.join('') + '</ul>');
   
   var ext = files[0].name.split('.').pop()
   if (ext == 'binvox') {
