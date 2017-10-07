@@ -25,15 +25,16 @@ function read_binvox(array_buffer) {
   var lines = [], line='', c=0;
   while (line != 'data') {
     var pos = buf.indexOf('\n');
+    if (c++ > 1000 || pos === -1) return Promise.reject("error reading header");
     line = buf.toString('utf-8', 0, pos);
     lines.push(line);
     buf = buf.slice(pos+1);
-    if (c++ > 1000) return -1;
   }
+
   
   var line = lines[0].slice(0, 7);
   if (line != '#binvox') {
-    return Promise.reject(`Error: first line reads ${line} instead of #binvox`)
+    return Promise.reject(`first line reads ${line} instead of #binvox`)
   }
   var version = parseInt(lines[0].slice(8), 10);
   console.log("binvox version: " + version);
@@ -55,21 +56,21 @@ function read_binvox(array_buffer) {
       break;
 
     } else {
-      return Promise.reject(`...unrecognized keyword ${line}, skipping`)
+      return Promise.reject(`unrecognized keyword ${line}, skipping`)
     }
   }
   if (depth === void 0) {
     if (height === void 0 || width === void 0) {
-      return Promise.reject("error reading header")
+      return Promise.reject("error reading header");
     } else {
-      return Promise.reject("missing dimensions in header")
+      return Promise.reject("missing dimensions in header");
     }
     return -1;
   }
   
   // should be depth === width === height
   console.log('size: '+`(${depth}, ${width}, ${height})`);
-  $('#list > ul > li').append(`: (${depth}, ${width}, ${height})`);
+  $('#list > .alert').append(`(${depth}, ${width}, ${height})`);
 
   // read voxel data
   voxel = [];
@@ -93,18 +94,17 @@ function read_binvox(array_buffer) {
   }
   buf = null;
 
-  return new Promise(function(resolve, reject) {
-    resolve();
-  });
+  return Promise.resolve();
 }
 
 function fileLoad() { 
-  read_binvox(reader.result)
-  .then(() => {
+  read_binvox(reader.result).then(() => {
     plot_voxel();
-  })
-  .catch((err) => {
-    console.warn(err);
+  }).catch((err) => {
+    $('#list > .alert').remove();
+    $('#list').append(
+      `<div class="alert alert-danger" role="alert"> <strong>Error</strong>: ${err}</div>`
+    )
   });
 }
 
@@ -112,13 +112,6 @@ function fileLoad() {
 // plotting functions
 //
 function plot_voxel() {
-  if ( voxel_mesh ) {
-    scene.remove( voxel_mesh );
-    voxel_geo.dispose();
-    voxel_mat.dispose();
-    console.log('removed!')
-  }
-
   voxel_geo = new THREE.Geometry;
   var mesh_item = new THREE.Mesh(new THREE.BoxGeometry(cube_size, cube_size, cube_size));
 
@@ -166,18 +159,22 @@ function handleFileSelect(evt) {
   evt.stopPropagation();
   evt.preventDefault();
 
+  if ( voxel_mesh ) {
+    scene.remove( voxel_mesh );
+    voxel_geo.dispose();
+    voxel_mat.dispose();
+    console.log('removed!')
+  }
+  
   var files = evt.dataTransfer.files; // FileList object.
-
   var output = [];
 
-  if ($('#list > ul')) {
-    $('#list > ul').remove();
-  }
+  $('#list > .alert').remove();
   for (var i = 0, f; f = files[i]; i++) {
-    output.push('<li><strong>', escape(f.name), '</strong></li>');
+    output.push(`<div class="alert alert-success" role="alert"> <strong>${f.name}</strong>: </div>`)
   }
 
-  $('#list').append('<ul>' + output.join('') + '</ul>');
+  $('#list').append(output.join(''));
   
   var ext = files[0].name.split('.').pop()
   if (ext == 'binvox') {

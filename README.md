@@ -9,7 +9,6 @@ You can try it at: [here](https://piyo56.github.io/simple_voxel_viewer/index.htm
 
 ### TODO
 
-- [ ] improve read -> plot promise flow
 - [x] improve memory efficiency
 - [x] improve loading, drawing model speed
 - [ ] improve page layout
