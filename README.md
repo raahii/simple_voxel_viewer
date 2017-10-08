@@ -13,6 +13,7 @@ You can try it at: [here](https://piyo56.github.io/simple_voxel_viewer/index.htm
 - [x] improve loading, drawing model speed
 - [ ] improve page layout
 - [ ] support `.obj`.
-- [ ] support any size of input object
+- [x] support any size of input object
+- [x] support centering option
 - [ ] support resizing
 - [ ] support writing out to file

@@ -6320,7 +6320,8 @@ function read_binvox(array_buffer) {
 
 function fileLoad() { 
   read_binvox(reader.result).then(() => {
-    plot_voxel();
+    var centering = $("#centering").prop("checked");
+    plot_voxel(centering);
   }).catch((err) => {
     $('#list > .alert').remove();
     $('#list').append(
@@ -6329,10 +6330,40 @@ function fileLoad() {
   });
 }
 
+function argmax(v, axis) {
+  idx = {
+    'x': 0,
+    'y': 1,
+    'z': 2,
+  }
+  var max = v[0][idx[axis]];
+  for(var i=1; i<v.length; i++) {
+    if (v[i][idx[axis]] > max) {
+      max = v[i][idx[axis]]
+    }
+  }
+  return max;
+}
+
+function argmin(v, axis) {
+  idx = {
+    'x': 0,
+    'y': 1,
+    'z': 2,
+  }
+  var min = v[0][idx[axis]];
+  for(var i=1; i<v.length; i++) {
+    if (v[i][idx[axis]] < min) {
+      min = v[i][idx[axis]]
+    }
+  }
+  return min;
+}
+
 //
 // plotting functions
 //
-function plot_voxel() {
+function plot_voxel(centering = true) {
   console.log("plotting!");
 
   // 既存のvoxelメッシュの削除
@@ -6366,10 +6397,17 @@ function plot_voxel() {
     y: -cube_size / 2,
     z: -0.5*cube_size*(grid_size-1),
   };
+
+  var offset_x=0, offset_y=0, offset_z=0;
+  if (centering) {
+     offset_x = ((argmax(voxel, 'x') - argmin(voxel, 'x')) / 2 - grid_size / 2) * cube_size;
+     offset_z = ((argmax(voxel, 'z') - argmin(voxel, 'z')) / 2 - grid_size / 2) * cube_size;
+  }
+
   for (var i=0; i<voxel.length; i++) {
-    var norm_x = origin.x + cube_size * voxel[i][0];
-    var norm_y = origin.y + cube_size * voxel[i][1];
-    var norm_z = origin.z + cube_size * voxel[i][2];
+    var norm_x = origin.x - offset_x + cube_size * voxel[i][0];
+    var norm_y = origin.y - offset_y + cube_size * voxel[i][1];
+    var norm_z = origin.z - offset_z + cube_size * voxel[i][2];
     mesh_item.position.set(norm_x, norm_y, norm_z);
     voxel_geo.mergeMesh(mesh_item);
   }
@@ -6380,7 +6418,6 @@ function plot_voxel() {
   console.timeEnd('loading time');
 
   mesh_item = null;
-  voxel = null;
 }
 
 //
@@ -6477,6 +6514,11 @@ function init() {
   dropZone.addEventListener('dragleave', handleDragLeave, false);
   dropZone.addEventListener('drop', handleFileSelect, false);
   reader.addEventListener('load', fileLoad, false);
+
+  // オプション
+  $('#centering').change(() => {
+    plot_voxel($('#centering').prop('checked'));
+  });
   
   // 初回実行
   animate();
