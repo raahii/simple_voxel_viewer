@@ -5,7 +5,7 @@ Simple Voxel Viewer
 
 This is a simple 3D model viewer. Supporting `.binvox` extension.
 
-You can try it at: [here](https://piyo56.github.io/simple_voxel_viewer/index.html).
+You can try it [here](https://raahii.github.io/simple_voxel_viewer/index.html).
 
 ### TODO
 
